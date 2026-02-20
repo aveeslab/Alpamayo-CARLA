@@ -17,6 +17,12 @@ import torch
 from einops import rearrange
 from transformers import BitsAndBytesConfig
 
+# ============================================================================
+# User Config (Edit for your local CARLA version/layout)
+# ============================================================================
+# Used only when CARLA_ROOT/CARLA_HOME env vars are not set.
+CARLA_AGENT_ROOT = "carla/CARLA_0.9.16"
+
 
 def _resolve_vehicle_pid_controller():
     """Import VehiclePIDController, auto-adding env/relative CARLA agent paths."""
@@ -32,13 +38,8 @@ def _resolve_vehicle_pid_controller():
         if v:
             candidate_roots.append(v)
 
-    # Repository-relative/common local paths (no user-specific absolute paths).
-    candidate_roots.extend([
-        "carla",
-        os.path.join("carla", "CARLA_0.9.16"),
-        os.path.join("..", "carla"),
-        os.path.join("..", "CARLA_0.9.16"),
-    ])
+    # User-configured fallback path.
+    candidate_roots.append(CARLA_AGENT_ROOT)
 
     for root in candidate_roots:
         agents_parent = os.path.abspath(os.path.join(root, "PythonAPI", "carla"))
