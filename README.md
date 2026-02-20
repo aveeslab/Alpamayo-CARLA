@@ -156,6 +156,15 @@ Output:
 
 ## 4) Closed-Loop Inference
 
+Before running, set your local CARLA PythonAPI path in `carla_alpamayo_closed_loop.py`:
+
+```python
+# User Config (top of file)
+CARLA_AGENT_ROOT = "carla/CARLA_0.9.16"
+```
+
+Use the path that contains `PythonAPI/carla` on your machine.
+
 Run (default, no extra options):
 
 ```bash
