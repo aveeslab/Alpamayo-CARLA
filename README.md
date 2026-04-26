@@ -2,7 +2,7 @@
 
 # CarlaMayo
 
-### Nvidia Alpamayo-R1 + CARLA Simulator
+### Nvidia Alpamayo 1.5 + CARLA Simulator
 
 [![HuggingFace](https://img.shields.io/badge/🤗%20Model-Alpamayo--R1--10B-blue)](https://huggingface.co/nvidia/Alpamayo-R1-10B)
 [![arXiv](https://img.shields.io/badge/arXiv-2511.00088-b31b1b.svg)](https://arxiv.org/abs/2511.00088)
