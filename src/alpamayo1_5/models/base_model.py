@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,13 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Base Reasoning VLA model implementation for Alpamayo R1 release."""
+"""Base Reasoning VLA model implementation for Alpamayo 1.5 release."""
 
+import copy
 import logging
 from typing import Any
 
 import einops
 import hydra.utils as hyu
+import numpy as np
 import torch
 from transformers import (
     AutoProcessor,
@@ -28,6 +30,8 @@ from transformers import (
     Qwen3VLConfig,
     Qwen3VLForConditionalGeneration,
 )
+
+from alpamayo1_5.models.token_utils import extract_text_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -45,25 +49,25 @@ SPECIAL_TOKENS_KEYS = [
     "prompt_start",
     "prompt_end",
     "image_start",
-    "image_pre_tkn",
+    "_padding_0",
     "image_end",
     "traj_history_start",
-    "traj_history_pre_tkn",
+    "_padding_1",
     "traj_history_end",
     "cot_start",
     "cot_end",
-    "meta_action_start",
-    "meta_action_end",
+    "_padding_2",
+    "_padding_3",
     "traj_future_start",
-    "traj_future_pre_tkn",
+    "_padding_4",
     "traj_future_end",
     "traj_history",
     "traj_future",
     "image_pad",
-    "vectorized_wm",
-    "vectorized_wm_start",
-    "vectorized_wm_end",
-    "vectorized_wm_pre_tkn",
+    "_padding_5",
+    "_padding_6",
+    "_padding_7",
+    "_padding_8",
     "route_start",
     "route_pad",
     "route_end",
@@ -443,3 +447,54 @@ class ReasoningVLA(PreTrainedModel, TrajectoryFusionMixin):
         """Delegate weight tying to the nested VLM model."""
         if hasattr(self.vlm, "tie_weights"):
             self.vlm.tie_weights()
+
+    def generate_text(
+        self,
+        data: dict[str, Any],
+        top_p: float = 0.98,
+        top_k: int | None = None,
+        temperature: float = 0.6,
+        num_samples: int = 1,
+        max_generation_length: int = 256,
+    ) -> dict[str, np.ndarray]:
+        """Generate text responses from tokenized inputs.
+
+        This method runs autoregressive VLM generation and extracts structured text outputs from the generated token sequence.
+
+        Args:
+            data: The input data.
+            top_p: The top-p value for sampling.
+            top_k: The top-k value for sampling.
+            temperature: The temperature for sampling.
+            num_samples: Number of response samples to generate.
+            max_generation_length: Maximum number of new tokens to generate.
+
+        Returns:
+            Dict mapping text-field names to arrays of extracted strings,
+            each with shape ``[B, num_samples]``. Keys include ``"cot"``,
+            ``"meta_action"``, and ``"answer"``.
+        """
+        data = copy.deepcopy(data)
+        tokenized_data = data["tokenized_data"]
+        input_ids = tokenized_data.pop("input_ids")
+
+        generation_config = self.vlm.generation_config
+        generation_config.top_p = top_p
+        generation_config.temperature = temperature
+        generation_config.do_sample = True
+        generation_config.num_return_sequences = num_samples
+        generation_config.max_new_tokens = max_generation_length
+        generation_config.output_logits = True
+        generation_config.return_dict_in_generate = True
+        generation_config.top_k = top_k
+        generation_config.pad_token_id = self.tokenizer.pad_token_id
+
+        generated = self.vlm.generate(
+            input_ids=input_ids, **tokenized_data, generation_config=generation_config
+        )
+        generated_tokens = generated.sequences[:, input_ids.shape[1] :]
+
+        extra = extract_text_tokens(self.tokenizer, generated_tokens)
+        for key in extra:
+            extra[key] = np.array(extra[key]).reshape([input_ids.shape[0], num_samples])
+        return extra

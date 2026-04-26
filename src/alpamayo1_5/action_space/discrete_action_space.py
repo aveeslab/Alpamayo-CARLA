@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +18,7 @@ from typing import Any
 import hydra.utils as hyu
 import torch
 
-from alpamayo_r1.action_space.action_space import ActionSpace
+from alpamayo1_5.action_space.action_space import ActionSpace
 
 
 class DiscreteTrajectoryTokenizer:

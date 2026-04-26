@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,17 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Configuration classes for Alpamayo R1 release models."""
+"""Configuration classes for Alpamayo 1.5 release models."""
 
 from typing import Any
 
-from alpamayo_r1.models.base_model import ReasoningVLAConfig
+from alpamayo1_5.models.base_model import ReasoningVLAConfig
 
 
-class AlpamayoR1Config(ReasoningVLAConfig):
-    """Configuration for the Alpamayo R1 release model."""
+class Alpamayo1_5Config(ReasoningVLAConfig):
+    """Configuration for the Alpamayo 1.5 release model."""
 
-    model_type = "alpamayo_r1"
+    model_type = "alpamayo1_5"
 
     def __init__(
         self,
@@ -34,6 +34,8 @@ class AlpamayoR1Config(ReasoningVLAConfig):
         expert_cfg: dict[str, Any] | None = None,
         keep_same_dtype: bool = True,
         expert_non_causal_attention: bool = True,
+        include_camera_ids: bool = False,
+        include_frame_nums: bool = False,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
@@ -44,3 +46,5 @@ class AlpamayoR1Config(ReasoningVLAConfig):
         self.expert_cfg = expert_cfg
         self.keep_same_dtype = keep_same_dtype
         self.expert_non_causal_attention = expert_non_causal_attention
+        self.include_camera_ids = include_camera_ids
+        self.include_frame_nums = include_frame_nums

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -86,7 +86,7 @@ class FourierEncoderV2(nn.Module):
         half = dim // 2
         freqs = torch.logspace(0, math.log10(max_freq), steps=half)
         self.out_dim = dim
-        self.register_buffer("freqs", freqs[None, :])  # (1, half)
+        self.register_buffer("freqs", freqs[None, :], persistent=False)  # (1, half)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass of the Fourier encoder V2.

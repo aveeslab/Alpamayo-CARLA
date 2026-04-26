@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,15 +16,15 @@
 import logging
 
 import torch
-from alpamayo_r1.action_space.action_space import ActionSpace
-from alpamayo_r1.action_space.utils import (
+from alpamayo1_5.action_space.action_space import ActionSpace
+from alpamayo1_5.action_space.utils import (
     dxy_theta_to_v,
     dxy_theta_to_v_without_v0,
     solve_xs_eq_y,
     theta_smooth,
     unwrap_angle,
 )
-from alpamayo_r1.geometry.rotation import (
+from alpamayo1_5.geometry.rotation import (
     rot_2d_to_3d,
     rotation_matrix_torch,
     so3_to_yaw_torch,
@@ -78,10 +78,10 @@ class UnicycleAccelCurvatureActionSpace(ActionSpace):
             kappa_ridge: Ridge parameter for curvature smoothing.
         """
         super().__init__()
-        self.register_buffer("accel_mean", torch.tensor(accel_mean))
-        self.register_buffer("accel_std", torch.tensor(accel_std))
-        self.register_buffer("curvature_mean", torch.tensor(curvature_mean))
-        self.register_buffer("curvature_std", torch.tensor(curvature_std))
+        self.register_buffer("accel_mean", torch.tensor(accel_mean), persistent=False)
+        self.register_buffer("accel_std", torch.tensor(accel_std), persistent=False)
+        self.register_buffer("curvature_mean", torch.tensor(curvature_mean), persistent=False)
+        self.register_buffer("curvature_std", torch.tensor(curvature_std), persistent=False)
         self.accel_bounds = accel_bounds
         self.curvature_bounds = curvature_bounds
         self.dt = dt
