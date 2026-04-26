@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +17,7 @@ import logging
 
 import einops
 import torch
-from alpamayo_r1.geometry.rotation import round_2pi_torch, so3_to_yaw_torch
+from alpamayo1_5.geometry.rotation import round_2pi_torch, so3_to_yaw_torch
 
 logger = logging.getLogger(__name__)
 

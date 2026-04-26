@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -48,6 +48,7 @@ class BaseDiffusion(ABC, nn.Module):
     def __init__(
         self,
         x_dims: list[int] | tuple[int] | int,
+        use_classifier_free_guidance: bool = False,
         *args,
         **kwargs,
     ):
@@ -58,6 +59,7 @@ class BaseDiffusion(ABC, nn.Module):
         """
         super().__init__()
         self.x_dims = [x_dims] if isinstance(x_dims, int) else list(x_dims)
+        self.use_classifier_free_guidance = use_classifier_free_guidance
 
     @abstractmethod
     @torch.no_grad()
@@ -65,6 +67,7 @@ class BaseDiffusion(ABC, nn.Module):
         self,
         batch_size: int,
         step_fn: StepFn,
+        unguided_step_fn: StepFn | None = None,
         device: torch.device = torch.device("cpu"),
         return_all_steps: bool = False,
         *args,
@@ -76,7 +79,9 @@ class BaseDiffusion(ABC, nn.Module):
             batch_size: The batch size.
             step_fn: The denoising step function that takes a noisy x and a
                 timestep t and returns either a denoised x, a vector field or noise depending on
-                the prediction type of the diffusion model.
+                the prediction type of the diffusion model. (assumed to be with guidance if the
+                diffusion model uses classifier free guidance)
+            unguided_step_fn: The denoising step function. (assumed to be without guidance)
             device: The device to use.
             return_all_steps: Whether to return the outputs from all steps.
 

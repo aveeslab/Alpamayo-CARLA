@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -38,7 +38,7 @@ def extract_traj_tokens(
     This is a fully vectorized implementation that processes all batches in parallel
     without looping over the batch dimension.
 
-    The output tokens to be [...<|cot_end|><|meta_action_start|>...<meta_action_end>
+    The output tokens to be [...<|cot_end|>
         <|future_traj_start|>]<|future_traj|>...<|future_traj_end|>.
 
     Args:
