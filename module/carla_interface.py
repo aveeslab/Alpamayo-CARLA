@@ -165,7 +165,7 @@ class CARLAInterface:
             cam_bp.set_attribute("image_size_x", str(cfg.IMG_WIDTH))
             cam_bp.set_attribute("image_size_y", str(cfg.IMG_HEIGHT))
             cam_bp.set_attribute("fov", str(cfg_cam["fov"]))
-            cam_bp.set_attribute("enable_postprocess_effects", "True")
+            cam_bp.set_attribute("enable_postprocess_effects", str(cfg.CAMERA_ENABLE_POSTPROCESS_EFFECTS))
             cam_bp.set_attribute("sensor_tick", "0.0")
 
             transform = carla.Transform(
