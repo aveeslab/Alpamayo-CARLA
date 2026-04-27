@@ -73,7 +73,7 @@ the CARLA inference scripts because they import OpenCV, SciPy, and optional
 The model requires access to gated resources. Request access first:
 
 - [Physical AI AV Dataset](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles)
-- [Alpamayo Model Weights](https://huggingface.co/nvidia/Alpamayo-R1-10B)
+- [Alpamayo Model Weights](https://huggingface.co/nvidia/Alpamayo-1.5-10B)
 
 Then authenticate:
 
