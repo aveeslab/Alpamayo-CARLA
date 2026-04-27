@@ -35,7 +35,7 @@ Environment setup has been moved to a separate document:
 
 Data collection, open-loop inference, and closed-loop inference instructions have been moved to a separate document:
 
-- [Data Collection and Inference Workflows](docs/inference-workflows.md)
+- [Data Collection and Inference](docs/inference-workflows.md)
 
 
 ## Project Structure
