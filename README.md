@@ -25,16 +25,6 @@
 > ⚠️ **Note**: GPUs with less than 24 GB VRAM will likely encounter CUDA out-of-memory errors.
 > Demo) 4-bit Quantization Model requires 12GB VRAM.
 
-## Repository Scope
-
-Tracked files in this repo:
-- `data_collect.py`
-- `carla_alpamayo_open_loop.py`
-- `carla_alpamayo_closed_loop.py`
-- `requirements-carla.txt`
-- `requirements-alpamayo.txt`
-- `README.md`
-
 ## Installation
 
 Environment setup has been moved to a separate document:
