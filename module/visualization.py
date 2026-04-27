@@ -135,7 +135,7 @@ class VideoRecorder:
         self.frames.append(frame)
 
     def _create_writer(self, width, height):
-        for codec in ("avc1", "H264", "mp4v"):
+        for codec in ("mp4v", "avc1", "H264"):
             fourcc = cv2.VideoWriter_fourcc(*codec)
             writer = cv2.VideoWriter(self.output_path, fourcc, self.fps, (width, height))
             if writer.isOpened():
