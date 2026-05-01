@@ -85,19 +85,6 @@ def prepare_model_input(images_array, history_xyz, history_rot):
     }
 
 
-def prepare_vqa_input(images_array, camera_indices=None):
-    """Convert a reduced CARLA image subset to Alpamayo VQA input format."""
-
-    images = torch.from_numpy(images_array).permute(0, 1, 4, 2, 3).contiguous()
-    data = {
-        "image_frames": images,
-        "num_frames_per_camera": int(images.shape[1]),
-    }
-    if camera_indices is not None:
-        data["camera_indices"] = torch.as_tensor(camera_indices, dtype=torch.long)
-    return data
-
-
 def run_inference(
     model,
     processor,
@@ -205,21 +192,17 @@ def run_vqa(
     processor,
     data,
     question: str,
-    max_generation_length: int = 96,
 ):
     """Run Alpamayo VQA text generation for a driving-relevant question."""
 
     question = question.strip()
     if not question:
         raise ValueError("question must not be empty")
-    if int(max_generation_length) < 1:
-        raise ValueError("max_generation_length must be positive")
 
     messages = helper.create_vqa_message(
         data["image_frames"].flatten(0, 1),
         question=question,
         camera_indices=data.get("camera_indices"),
-        num_frames_per_camera=int(data.get("num_frames_per_camera", cfg.NUM_FRAMES)),
     )
     inputs = processor.apply_chat_template(
         messages,
@@ -237,7 +220,7 @@ def run_vqa(
             top_p=0.98,
             temperature=0.6,
             num_samples=1,
-            max_generation_length=int(max_generation_length),
+            max_generation_length=256,
         )
 
 
