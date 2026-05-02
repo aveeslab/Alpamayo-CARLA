@@ -162,6 +162,9 @@ a1_5_carla_venv/
 # CARLA/Alpamayo generated validation artifacts
 carla_data*/
 carla_alpamayo_*.mp4
+baseline.json
+optimized.json
+latency_*.json
 *.avi
 *.mov
 *.mkv
