@@ -15,6 +15,7 @@ from module import config as cfg
 from module.latency_control import NormalModeLatencyStats, should_refresh_normal_inference
 from module.navigation_control import NavigationControlState
 from module.pid_controller import OfficialPIDFollower
+from module.trajectory_cache import alpamayo_local_to_world, world_to_alpamayo_local
 from module.visualization import VideoRecorder, create_visualization_frame
 from module.carla_interface import CARLAInterface
 from module.inference import (
@@ -235,6 +236,7 @@ def main():
 
         current_trajectory = None
         current_pred_xyz = None
+        current_pred_world = None
         prev_selected_trajectory = None
         current_selected_traj_idx = 0
         current_cot = ""
@@ -322,6 +324,7 @@ def main():
                     "images_array": images_array,
                     "history_xyz": history_xyz,
                     "history_rot": history_rot,
+                    "ego_state": state.copy(),
                     "navigation_text": nav_state.navigation_text,
                     "navigation_weight": nav_state.navigation_weight,
                     "vqa_question": nav_state.vqa_question,
@@ -435,6 +438,7 @@ def main():
                     prev_selected_trajectory = None
                     current_trajectory = None
                     current_pred_xyz = None
+                    current_pred_world = None
                     current_trajectory_ts = None
                     pending_inference = False
                     last_seen_nav_revision = nav_state.revision
@@ -466,6 +470,9 @@ def main():
             frame_buffer.append(images)
             if len(frame_buffer) > cfg.NUM_FRAMES:
                 frame_buffer.pop(0)
+            if current_pred_world is not None:
+                current_pred_xyz = world_to_alpamayo_local(current_pred_world, state)
+                current_trajectory = current_pred_xyz[current_selected_traj_idx]
 
             if args.async_mode:
                 now_ts = time.time()
@@ -550,9 +557,11 @@ def main():
                             prev_selected_trajectory,
                         )
                         current_selected_traj_idx = selected_idx
-                        current_trajectory = traj_samples[selected_idx]
+                        anchor_state = latest_result.get("ego_state", state)
+                        current_pred_world = alpamayo_local_to_world(traj_samples, anchor_state)
+                        current_pred_xyz = world_to_alpamayo_local(current_pred_world, state)
+                        current_trajectory = current_pred_xyz[selected_idx]
                         prev_selected_trajectory = current_trajectory.copy()
-                        current_pred_xyz = traj_samples
                         current_cot = extract_cot_text(extra)
                         current_inference_time = inference_time
                         current_trajectory_ts = float(latest_result["result_ts"])
@@ -664,9 +673,10 @@ def main():
                                 prev_selected_trajectory,
                             )
                             current_selected_traj_idx = selected_idx
-                            current_trajectory = traj_samples[selected_idx]
+                            current_pred_world = alpamayo_local_to_world(traj_samples, state)
+                            current_pred_xyz = world_to_alpamayo_local(current_pred_world, state)
+                            current_trajectory = current_pred_xyz[selected_idx]
                             prev_selected_trajectory = current_trajectory.copy()
-                            current_pred_xyz = traj_samples
                             current_cot = extract_cot_text(extra)
                             current_inference_time = model_inference_time
                             current_trajectory_ts = time.time()
