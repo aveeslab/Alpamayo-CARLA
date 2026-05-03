@@ -123,17 +123,33 @@ class OfficialPIDFollower:
         """Estimate target speed from Alpamayo waypoint spacing.
 
         Alpamayo expresses stop and slow-down intent by producing short future
-        displacements. Do not force a nonzero minimum speed here; otherwise the
-        controller accelerates through predicted stop trajectories.
+        extents. Only allow a full stop for trajectories whose entire spatial
+        extent stays near the ego vehicle. For actionable forward paths, keep a
+        minimum crawl speed because early trajectory samples can be densely
+        clustered near the origin even when later waypoints continue forward.
         """
 
         if len(wp_local) < 2:
             return 0.0
 
+        traj_extent = float(np.max(np.linalg.norm(wp_local[:, :2], axis=1)))
+        if traj_extent <= cfg.PID_STOP_TRAJECTORY_MAX_EXTENT_M:
+            return 0.0
+
         horizon = int(min(cfg.PID_TARGET_SPEED_HORIZON_STEPS, len(wp_local) - 1))
         segment_distances = np.linalg.norm(np.diff(wp_local[: horizon + 1, :2], axis=0), axis=1)
-        speed_mps = float(np.mean(segment_distances) / cfg.CONTROL_DT)
-        return float(np.clip(speed_mps * 3.6, 0.0, cfg.PID_TARGET_SPEED_MAX_KMH))
+        displacement_speed_kmh = float(np.mean(segment_distances) / cfg.CONTROL_DT * 3.6)
+        extent_floor_kmh = float(
+            cfg.PID_TARGET_SPEED_MIN_KMH + cfg.PID_TARGET_SPEED_EXTENT_GAIN * traj_extent
+        )
+        target_speed_kmh = max(displacement_speed_kmh, extent_floor_kmh)
+        return float(
+            np.clip(
+                target_speed_kmh,
+                cfg.PID_TARGET_SPEED_MIN_KMH,
+                cfg.PID_TARGET_SPEED_MAX_KMH,
+            )
+        )
 
     def compute_control(self, vehicle_tf, wp_ego, speed_mps):
         wp_local = alpamayo_to_carla_local(wp_ego)

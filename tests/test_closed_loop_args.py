@@ -214,3 +214,33 @@ def test_closed_loop_accepts_control_debug(monkeypatch):
     args = closed_loop.parse_args()
 
     assert args.control_debug is True
+
+
+def test_smooth_control_releases_stale_brake_when_raw_control_throttles():
+    previous = {"steer": 0.0, "throttle": 0.0, "brake": 0.8}
+
+    control = closed_loop.smooth_control(
+        previous,
+        steering_raw=0.1,
+        throttle_raw=0.35,
+        brake_raw=0.0,
+        alpha=0.25,
+    )
+
+    assert control["throttle"] > 0.0
+    assert control["brake"] == 0.0
+
+
+def test_smooth_control_releases_stale_throttle_when_raw_control_brakes():
+    previous = {"steer": 0.0, "throttle": 0.8, "brake": 0.0}
+
+    control = closed_loop.smooth_control(
+        previous,
+        steering_raw=-0.1,
+        throttle_raw=0.0,
+        brake_raw=1.0,
+        alpha=0.25,
+    )
+
+    assert control["throttle"] == 0.0
+    assert control["brake"] > 0.0
