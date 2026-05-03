@@ -1,5 +1,6 @@
 import numpy as np
 
+from module import config as cfg
 from module.pid_controller import OfficialPIDFollower
 
 
@@ -37,6 +38,15 @@ def test_target_speed_estimate_allows_stop_trajectory():
     assert target_speed == 0.0
 
 
+def test_target_speed_estimate_allows_tiny_stop_trajectory():
+    wp_local = np.zeros((12, 3), dtype=np.float64)
+    wp_local[:, 0] = np.linspace(0.0, cfg.PID_STOP_TRAJECTORY_MAX_EXTENT_M * 0.5, 12)
+
+    target_speed = OfficialPIDFollower._estimate_target_speed_kmh(wp_local)
+
+    assert target_speed == 0.0
+
+
 def test_target_speed_estimate_uses_trajectory_displacement_rate():
     wp_local = np.zeros((12, 3), dtype=np.float64)
     wp_local[:, 0] = np.arange(12) * 0.5
@@ -44,3 +54,13 @@ def test_target_speed_estimate_uses_trajectory_displacement_rate():
     target_speed = OfficialPIDFollower._estimate_target_speed_kmh(wp_local)
 
     assert 17.5 <= target_speed <= 18.5
+
+
+def test_target_speed_estimate_keeps_dense_forward_path_moving():
+    wp_local = np.zeros((64, 3), dtype=np.float64)
+    wp_local[:10, 0] = np.linspace(0.0, 0.02, 10)
+    wp_local[10:, 0] = np.linspace(0.02, 6.0, 54)
+
+    target_speed = OfficialPIDFollower._estimate_target_speed_kmh(wp_local)
+
+    assert target_speed >= cfg.PID_TARGET_SPEED_MIN_KMH

@@ -56,6 +56,25 @@ def capture_initial_ui_frame(carla_if, frame_count):
     return frame_count, ui_frame, telemetry
 
 
+def smooth_control(
+    prev_control,
+    steering_raw,
+    throttle_raw,
+    brake_raw,
+    alpha=cfg.CONTROL_SMOOTH_ALPHA,
+):
+    """Smooth steering while switching throttle/brake without stale opposition."""
+
+    steering = (1.0 - alpha) * prev_control["steer"] + alpha * steering_raw
+    if throttle_raw >= brake_raw:
+        throttle = (1.0 - alpha) * prev_control["throttle"] + alpha * throttle_raw
+        brake = 0.0
+    else:
+        throttle = 0.0
+        brake = (1.0 - alpha) * prev_control["brake"] + alpha * brake_raw
+    return {"steer": steering, "throttle": throttle, "brake": brake}
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Run CARLA closed-loop control with Alpamayo (modular)."
@@ -878,17 +897,15 @@ def main():
                 )
                 current_control_target_xyz = _ctrl_debug.get("target_wp_local_alpamayo")
 
-                alpha = cfg.CONTROL_SMOOTH_ALPHA
-                steering = (1.0 - alpha) * prev_control["steer"] + alpha * steering_raw
-                throttle = (1.0 - alpha) * prev_control["throttle"] + alpha * throttle_raw
-                brake = (1.0 - alpha) * prev_control["brake"] + alpha * brake_raw
-
-                if throttle >= brake:
-                    brake = 0.0
-                else:
-                    throttle = 0.0
-
-                prev_control = {"steer": steering, "throttle": throttle, "brake": brake}
+                prev_control = smooth_control(
+                    prev_control,
+                    steering_raw,
+                    throttle_raw,
+                    brake_raw,
+                )
+                steering = prev_control["steer"]
+                throttle = prev_control["throttle"]
+                brake = prev_control["brake"]
                 commanded_control = carla_if.apply_control(steering, throttle, brake)
 
                 if current_pred_xyz is not None:
