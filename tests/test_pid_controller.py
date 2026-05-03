@@ -27,3 +27,20 @@ def test_pick_target_uses_raw_alpamayo_path_without_map_projection():
     assert target_wp.transform.location.x == wp_world[target_idx, 0]
     assert target_wp.transform.location.y == wp_world[target_idx, 1]
     assert target_wp.transform.location.z == wp_world[target_idx, 2]
+
+
+def test_target_speed_estimate_allows_stop_trajectory():
+    wp_local = np.zeros((12, 3), dtype=np.float64)
+
+    target_speed = OfficialPIDFollower._estimate_target_speed_kmh(wp_local)
+
+    assert target_speed == 0.0
+
+
+def test_target_speed_estimate_uses_trajectory_displacement_rate():
+    wp_local = np.zeros((12, 3), dtype=np.float64)
+    wp_local[:, 0] = np.arange(12) * 0.5
+
+    target_speed = OfficialPIDFollower._estimate_target_speed_kmh(wp_local)
+
+    assert 17.5 <= target_speed <= 18.5

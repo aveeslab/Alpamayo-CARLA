@@ -76,15 +76,27 @@ def test_closed_loop_accepts_latency_benchmark_controls(monkeypatch):
     assert args.latency_stats_json == "run.json"
 
 
-def test_closed_loop_disables_unused_generate_logits_by_default(monkeypatch):
+def test_closed_loop_keeps_generate_logits_by_default(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["carla_alpamayo_closed_loop.py"])
+
+    args = closed_loop.parse_args()
+
+    assert args.disable_unused_generate_logits is False
+
+
+def test_closed_loop_can_disable_unused_generate_logits_for_latency(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["carla_alpamayo_closed_loop.py", "--disable-unused-generate-logits"],
+    )
 
     args = closed_loop.parse_args()
 
     assert args.disable_unused_generate_logits is True
 
 
-def test_closed_loop_can_keep_generate_logits_for_baseline(monkeypatch):
+def test_closed_loop_accepts_keep_generate_logits_alias(monkeypatch):
     monkeypatch.setattr(
         sys,
         "argv",
