@@ -118,17 +118,28 @@ class OfficialPIDFollower:
         target_wp = _RawTargetWaypoint(loc)
         return target_wp, target_idx, lookahead_m
 
+    @staticmethod
+    def _estimate_target_speed_kmh(wp_local):
+        """Estimate target speed from Alpamayo waypoint spacing.
+
+        Alpamayo expresses stop and slow-down intent by producing short future
+        displacements. Do not force a nonzero minimum speed here; otherwise the
+        controller accelerates through predicted stop trajectories.
+        """
+
+        if len(wp_local) < 2:
+            return 0.0
+
+        horizon = int(min(cfg.PID_TARGET_SPEED_HORIZON_STEPS, len(wp_local) - 1))
+        segment_distances = np.linalg.norm(np.diff(wp_local[: horizon + 1, :2], axis=0), axis=1)
+        speed_mps = float(np.mean(segment_distances) / cfg.CONTROL_DT)
+        return float(np.clip(speed_mps * 3.6, 0.0, cfg.PID_TARGET_SPEED_MAX_KMH))
+
     def compute_control(self, vehicle_tf, wp_ego, speed_mps):
         wp_local = alpamayo_to_carla_local(wp_ego)
         wp_world = local_to_world(vehicle_tf, wp_local)
         traj_extent = float(np.max(np.linalg.norm(wp_local[:, :2], axis=1)))
-        target_speed_kmh = float(
-            np.clip(
-                cfg.PID_TARGET_SPEED_MIN_KMH + cfg.PID_TARGET_SPEED_EXTENT_GAIN * traj_extent,
-                cfg.PID_TARGET_SPEED_MIN_KMH,
-                cfg.PID_TARGET_SPEED_MAX_KMH,
-            )
-        )
+        target_speed_kmh = self._estimate_target_speed_kmh(wp_local)
         target_wp, target_idx, lookahead_m = self._pick_target(wp_world, speed_mps)
         if target_wp is None:
             return 0.0, 0.0, 0.0, {
@@ -141,7 +152,10 @@ class OfficialPIDFollower:
             "target_speed_kmh": target_speed_kmh,
             "lookahead_m": lookahead_m,
             "target_idx": int(target_idx),
-            "target_wp_xy": [float(target_wp.transform.location.x), float(target_wp.transform.location.y)],
+            "target_wp_xy": [
+                float(target_wp.transform.location.x),
+                float(target_wp.transform.location.y),
+            ],
             "target_wp_local_alpamayo": world_to_alpamayo_local(
                 np.asarray(
                     [

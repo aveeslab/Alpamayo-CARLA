@@ -141,10 +141,19 @@ def parse_args():
         "--keep-generate-logits",
         dest="disable_unused_generate_logits",
         action="store_false",
-        default=True,
+        default=False,
         help=(
             "Keep Alpamayo VLM returned logits during trajectory generation. "
-            "Default disables these unused returned logits to reduce single-call latency/memory."
+            "This is the default quality-first behavior."
+        ),
+    )
+    parser.add_argument(
+        "--disable-unused-generate-logits",
+        dest="disable_unused_generate_logits",
+        action="store_true",
+        help=(
+            "Disable returned VLM logits that the normal trajectory path does not consume. "
+            "Use only for latency/memory experiments."
         ),
     )
     parser.add_argument(

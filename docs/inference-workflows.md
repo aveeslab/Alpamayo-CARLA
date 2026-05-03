@@ -85,16 +85,13 @@ the Alpamayo action-space conversion path.
 
 Normal mode latency optimization:
 
-- Default normal mode keeps the original per-ready-frame refresh behavior and
-  preserves Alpamayo's original Qwen-VL image-token budget
-  (`--vlm-image-pixels 196608`) for path quality. It still optimizes the
-  single-call `vlm.generate()` hot path by disabling returned VLM logits that
-  the trajectory rollout does not consume. Token sampling, generated sequence
-  handling, KV cache use, and diffusion parameters are unchanged.
-- Low-latency experiment: add `--vlm-image-pixels 65536` only when you accept
-  possible path-quality loss from reduced visual tokens. Add
-  `--keep-generate-logits` to restore Alpamayo's original returned-logits
-  behavior too.
+- Default normal mode keeps the original per-ready-frame refresh behavior,
+  returned-logits behavior, and Qwen-VL image-token budget
+  (`--vlm-image-pixels 196608`) for path quality. Token sampling, generated
+  sequence handling, KV cache use, and diffusion parameters are unchanged.
+- Low-latency experiment: add `--disable-unused-generate-logits` to skip
+  returned VLM logits and/or `--vlm-image-pixels 65536` only when you accept
+  possible path-quality loss from reduced visual tokens.
 - On shutdown, compare `avg_vlm_generate_time_sec` in the printed/written normal
   latency stats; the target optimization gate is `>=30%`.
 - For repeatable benchmark runs, add `--max-frames N --no-video` to stop
@@ -108,7 +105,8 @@ Normal mode latency optimization:
 - Closed-loop control tracks the raw Alpamayo trajectory. The PID target is
   selected from the model output and is not projected onto CARLA map waypoints;
   the video overlay shows the Alpamayo path in blue and the active PID target
-  in green.
+  in green. The longitudinal target speed is estimated from Alpamayo waypoint
+  spacing, so short stop/slow trajectories are allowed to command braking.
 
 Optional pygame UI modes:
 
@@ -121,10 +119,10 @@ python carla_alpamayo_closed_loop.py --mode normal --pygame-ui \
   --keep-generate-logits --max-frames 100 --no-video \
   --latency-stats-json baseline.json
 
-# Low-latency image-token experiment and 30% gate check.
+# Low-latency experiment and 30% gate check.
 python carla_alpamayo_closed_loop.py --mode normal --pygame-ui \
-  --vlm-image-pixels 65536 --max-frames 100 --no-video \
-  --latency-stats-json optimized.json
+  --disable-unused-generate-logits --vlm-image-pixels 65536 \
+  --max-frames 100 --no-video --latency-stats-json optimized.json
 python tools/compare_latency_runs.py baseline.json optimized.json \
   --metric vlm-generate --min-reduction 0.30
 
