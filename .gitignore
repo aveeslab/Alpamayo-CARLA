@@ -227,3 +227,6 @@ __marimo__/
 
 # Local validation notes/logs
 /docs/setup-validation-log.md
+
+# Agent runtime instructions
+AGENTS.md
