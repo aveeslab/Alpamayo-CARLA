@@ -35,6 +35,38 @@ def test_closed_loop_defaults_to_normal_mode(monkeypatch):
     assert args.mode == "normal"
 
 
+def test_closed_loop_defaults_to_full_precision_model(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["carla_alpamayo_closed_loop.py"])
+
+    args = closed_loop.parse_args()
+
+    assert args.quantization is False
+
+
+def test_closed_loop_quantization_flag_enables_4bit_model(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["carla_alpamayo_closed_loop.py", "--quantization"],
+    )
+
+    args = closed_loop.parse_args()
+
+    assert args.quantization is True
+
+
+def test_closed_loop_no_quantization_flag_keeps_full_precision_model(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["carla_alpamayo_closed_loop.py", "--no-quantization"],
+    )
+
+    args = closed_loop.parse_args()
+
+    assert args.quantization is False
+
+
 def test_closed_loop_disables_unused_generate_logits_by_default(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["carla_alpamayo_closed_loop.py"])
 

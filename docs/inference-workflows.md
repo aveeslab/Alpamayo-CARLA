@@ -75,8 +75,8 @@ source a1_5_carla_venv/bin/activate
 python carla_alpamayo_closed_loop.py
 ```
 
-Closed-loop now defaults to 4-bit quantized mode for local testing. Use
-`--no-quantization` only when you have enough GPU memory for full precision.
+Closed-loop now defaults to full-precision model loading. Add `--quantization`
+when you want the 4-bit quantized model path for lower VRAM usage.
 Model loading also defaults to `--device-map auto` to let Accelerate place
 weights across available devices instead of forcing all weights onto `cuda:0`.
 The closed-loop script also defaults to `--cuda-linalg-library magma`; this
@@ -130,7 +130,7 @@ For lower VRAM machines, the validated command was:
 ```bash
 source a1_5_carla_venv/bin/activate
 export CARLA_ROOT=~/carla
-python carla_alpamayo_closed_loop.py --async
+python carla_alpamayo_closed_loop.py --quantization --async
 ```
 
 ## 4. NVIDIA Original Test Script

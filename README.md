@@ -46,8 +46,9 @@ Data collection, open-loop inference, and closed-loop inference instructions hav
 ### Closed-Loop UI Modes
 
 The closed-loop runner supports `normal`, `navigation`, and `vqa` modes through
-`--mode`. It defaults to 4-bit quantization, `Town03`, `device_map=auto`, and
-the MAGMA CUDA linalg backend for local GPU stability. Normal mode disables
+`--mode`. It defaults to full-precision model loading, `Town03`,
+`device_map=auto`, and the MAGMA CUDA linalg backend for local GPU stability.
+Add `--quantization` to use the 4-bit model path. Normal mode disables
 unused returned VLM logits by default to reduce CUDA memory while preserving
 Alpamayo's original image-token budget (`--vlm-image-pixels 196608`). Add
 `--keep-generate-logits` for the exact original returned-logits baseline, or use
@@ -115,7 +116,7 @@ config.attn_implementation = "sdpa"
 
 If you encounter OOM errors:
 
-1. Try 4-bit quantization.
+1. Try 4-bit quantization with `--quantization`.
 2. Ensure you have a GPU with enough VRAM for the selected precision and trajectory count.
 3. Keep `num_traj_samples` low on smaller GPUs.
 4. Close other GPU-intensive applications.
