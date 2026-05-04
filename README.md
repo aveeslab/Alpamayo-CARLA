@@ -43,7 +43,7 @@ Data collection, open-loop inference, and closed-loop inference instructions hav
 
 - [Data Collection and Inference](docs/inference-workflows.md)
 
-### Closed-Loop UI Modes
+## Closed-Loop UI Modes
 
 The closed-loop runner supports `normal`, `navigation`, and `vqa` modes through
 `--mode`. See the mode-specific usage guides:
