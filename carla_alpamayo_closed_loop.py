@@ -1,8 +1,6 @@
 """Modular entrypoint for CARLA closed-loop control with Alpamayo."""
 
 import argparse
-import json
-from pathlib import Path
 import queue
 import threading
 import time
@@ -12,12 +10,8 @@ import numpy as np
 import torch
 
 from module import config as cfg
-from module.latency_control import NormalModeLatencyStats, should_refresh_normal_inference
 from module.navigation_control import NavigationControlState
 from module.pid_controller import OfficialPIDFollower
-from module.respawn_control import RespawnMonitor
-from module.trajectory_cache import alpamayo_local_to_world, world_to_alpamayo_local
-from module.vlm_generate_optimization import VlmGenerateTiming
 from module.visualization import VideoRecorder, create_visualization_frame
 from module.carla_interface import CARLAInterface
 from module.inference import (
@@ -54,25 +48,6 @@ def capture_initial_ui_frame(carla_if, frame_count):
         "inference_time": 0.0,
     }
     return frame_count, ui_frame, telemetry
-
-
-def smooth_control(
-    prev_control,
-    steering_raw,
-    throttle_raw,
-    brake_raw,
-    alpha=cfg.CONTROL_SMOOTH_ALPHA,
-):
-    """Smooth steering while switching throttle/brake without stale opposition."""
-
-    steering = (1.0 - alpha) * prev_control["steer"] + alpha * steering_raw
-    if throttle_raw >= brake_raw:
-        throttle = (1.0 - alpha) * prev_control["throttle"] + alpha * throttle_raw
-        brake = 0.0
-    else:
-        throttle = 0.0
-        brake = (1.0 - alpha) * prev_control["brake"] + alpha * brake_raw
-    return {"steer": steering, "throttle": throttle, "brake": brake}
 
 
 def parse_args():
@@ -126,69 +101,9 @@ def parse_args():
         help='Initial VQA question for --mode vqa, e.g. "Describe the scene.".',
     )
     parser.add_argument(
-        "--normal-inference-interval-frames",
-        type=int,
-        default=0,
-        help=(
-            "Minimum synchronous CARLA frames between normal-mode model refreshes. "
-            "Default: 0 (refresh every ready frame). "
-            "Set 0 to reproduce the per-ready-frame baseline."
-        ),
-    )
-    parser.add_argument(
         "--start-paused",
         action="store_true",
         help="Start the pygame UI paused so navigation text can be entered before the first tick.",
-    )
-    parser.add_argument(
-        "--max-frames",
-        type=int,
-        default=0,
-        help="Stop after this many CARLA frames. Default: 0 means run until interrupted.",
-    )
-    parser.add_argument(
-        "--no-video",
-        action="store_true",
-        help="Disable MP4 recording for latency benchmark runs.",
-    )
-    parser.add_argument(
-        "--latency-stats-json",
-        default="",
-        help="Write normal-mode latency stats to this JSON file on shutdown.",
-    )
-    parser.add_argument(
-        "--control-debug",
-        action="store_true",
-        help="Print raw, smoothed, and CARLA-applied control values for debugging.",
-    )
-    parser.add_argument(
-        "--keep-generate-logits",
-        dest="disable_unused_generate_logits",
-        action="store_false",
-        default=False,
-        help=(
-            "Keep Alpamayo VLM returned logits during trajectory generation. "
-            "This is the default quality-first behavior."
-        ),
-    )
-    parser.add_argument(
-        "--disable-unused-generate-logits",
-        dest="disable_unused_generate_logits",
-        action="store_true",
-        help=(
-            "Disable returned VLM logits that the normal trajectory path does not consume. "
-            "Use only for latency/memory experiments."
-        ),
-    )
-    parser.add_argument(
-        "--vlm-image-pixels",
-        type=int,
-        default=196608,
-        help=(
-            "Per-image min/max pixel budget passed to the Qwen-VL processor. "
-            "Default: 196608 to preserve Alpamayo path quality. Use 65536 only "
-            "for an explicit low-latency experiment."
-        ),
     )
     parser.add_argument(
         "--carla-map",
@@ -209,52 +124,12 @@ def parse_args():
             'Default: "magma" to avoid cuSOLVER cholesky handle failures.'
         ),
     )
-    parser.add_argument(
-        "--no-auto-respawn",
-        dest="auto_respawn",
-        action="store_false",
-        default=True,
-        help="Disable automatic ego respawn after collisions or repeated stuck frames.",
-    )
-    parser.add_argument(
-        "--respawn-stuck-frames",
-        type=int,
-        default=cfg.RESPAWN_STUCK_FRAMES,
-        help=(
-            "Respawn after this many consecutive low-speed frames while throttle is commanded. "
-            "Set 0 to disable stuck respawn."
-        ),
-    )
-    parser.add_argument(
-        "--respawn-stuck-speed-kmh",
-        type=float,
-        default=cfg.RESPAWN_STUCK_SPEED_KMH,
-        help="Speed threshold for stuck respawn detection in km/h.",
-    )
-    parser.add_argument(
-        "--respawn-collision-cooldown-frames",
-        type=int,
-        default=cfg.RESPAWN_COLLISION_COOLDOWN_FRAMES,
-        help="Minimum frames between automatic respawns.",
-    )
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
     inference_interval_sec = 1.0
-    if args.normal_inference_interval_frames < 0:
-        raise ValueError("--normal-inference-interval-frames must be non-negative")
-    if args.max_frames < 0:
-        raise ValueError("--max-frames must be non-negative")
-    if args.vlm_image_pixels <= 0:
-        raise ValueError("--vlm-image-pixels must be positive")
-    if args.respawn_stuck_frames < 0:
-        raise ValueError("--respawn-stuck-frames must be non-negative")
-    if args.respawn_stuck_speed_kmh < 0:
-        raise ValueError("--respawn-stuck-speed-kmh must be non-negative")
-    if args.respawn_collision_cooldown_frames < 0:
-        raise ValueError("--respawn-collision-cooldown-frames must be non-negative")
 
     print("=" * 60)
     print("CARLA Real-time Control with Alpamayo")
@@ -266,20 +141,6 @@ def main():
     print(f"CARLA map: {args.carla_map}")
     print(f"Device map: {args.device_map}")
     print(f"CUDA linalg library: {args.cuda_linalg_library}")
-    print(f"Control debug: {'ON' if args.control_debug else 'OFF'}")
-    print(f"Video recording: {'OFF' if args.no_video else ('ON' if cfg.SAVE_VIDEO else 'OFF')}")
-    if args.max_frames:
-        print(f"Max frames: {args.max_frames}")
-    if args.mode == "normal":
-        print(f"Normal model refresh interval: {args.normal_inference_interval_frames} frames")
-    print(f"Auto respawn: {'ON' if args.auto_respawn else 'OFF'}")
-    if args.auto_respawn:
-        print(
-            "  collision cooldown="
-            f"{args.respawn_collision_cooldown_frames} frames, "
-            f"stuck={args.respawn_stuck_frames} frames "
-            f"@ <= {args.respawn_stuck_speed_kmh:.1f} km/h"
-        )
 
     nav_state = NavigationControlState(
         args.navigation_text,
@@ -303,24 +164,10 @@ def main():
     print(f"VRAM: {torch.cuda.memory_allocated() / 1024**3:.1f} GB allocated")
 
     carla_if = CARLAInterface()
-    save_video = cfg.SAVE_VIDEO and not args.no_video
-    video_recorder = VideoRecorder(cfg.OUTPUT_VIDEO, fps=cfg.VIDEO_FPS) if save_video else None
+    video_recorder = VideoRecorder(cfg.OUTPUT_VIDEO, fps=cfg.VIDEO_FPS) if cfg.SAVE_VIDEO else None
     pygame_ui = None
     latest_ui_frame = None
     latest_telemetry = {}
-    latency_stats = NormalModeLatencyStats()
-    vlm_generate_timing = VlmGenerateTiming()
-    respawn_monitor = RespawnMonitor(
-        cooldown_frames=args.respawn_collision_cooldown_frames,
-        stuck_frames=args.respawn_stuck_frames,
-        stuck_speed_kmh=args.respawn_stuck_speed_kmh,
-    )
-    respawn_count = 0
-    respawn_reasons = []
-    inference_request_q = None
-    inference_result_q = None
-    inference_stop = None
-    worker_thread = None
 
     if args.pygame_ui:
         from module.pygame_ui import ClosedLoopPygameUI
@@ -338,75 +185,26 @@ def main():
         carla_if.enable_synchronous_mode()
         carla_if.spawn_npcs(num_vehicles=cfg.NPC_VEHICLE_COUNT, num_walkers=cfg.NPC_WALKER_COUNT)
         carla_if.setup_cameras()
-        if args.auto_respawn:
-            carla_if.setup_collision_sensor()
         time.sleep(1.0)
 
         pid_follower = OfficialPIDFollower(carla_if.world, carla_if.ego_vehicle)
 
         current_trajectory = None
         current_pred_xyz = None
-        current_pred_world = None
         prev_selected_trajectory = None
         current_selected_traj_idx = 0
         current_cot = ""
         current_inference_time = 0.0
         frame_buffer = []
         current_trajectory_ts = None
-        current_control_target_xyz = None
-        last_model_refresh_frame = None
         prev_control = {"steer": 0.0, "throttle": 0.0, "brake": 0.0}
 
         pending_inference = False
         last_inference_submit_ts = 0.0
-        respawn_revision = 0
-
-        def _clear_async_queues():
-            if inference_request_q is not None:
-                while True:
-                    try:
-                        inference_request_q.get_nowait()
-                    except queue.Empty:
-                        break
-            if inference_result_q is not None:
-                while True:
-                    try:
-                        inference_result_q.get_nowait()
-                    except queue.Empty:
-                        break
-
-        def _auto_respawn(reason):
-            nonlocal current_trajectory, current_pred_xyz, current_pred_world
-            nonlocal prev_selected_trajectory, current_selected_traj_idx, current_cot
-            nonlocal current_inference_time, current_trajectory_ts, current_control_target_xyz
-            nonlocal last_model_refresh_frame
-            nonlocal prev_control, pending_inference, pid_follower, respawn_count
-            nonlocal respawn_revision
-
-            print(f"[Frame {frame_count}] Auto-respawn: {reason}")
-            carla_if.respawn_ego_vehicle()
-            pid_follower = OfficialPIDFollower(carla_if.world, carla_if.ego_vehicle)
-            current_trajectory = None
-            current_pred_xyz = None
-            current_pred_world = None
-            prev_selected_trajectory = None
-            current_selected_traj_idx = 0
-            current_cot = ""
-            current_inference_time = 0.0
-            current_trajectory_ts = None
-            current_control_target_xyz = None
-            last_model_refresh_frame = None
-            prev_control = {"steer": 0.0, "throttle": 0.0, "brake": 1.0}
-            pending_inference = False
-            respawn_revision += 1
-            respawn_count += 1
-            respawn_reasons.append({"frame": int(frame_count), "reason": reason})
-            respawn_monitor.mark_respawn(
-                frame_count=frame_count,
-                collision_count=carla_if.get_collision_count(),
-            )
-            frame_buffer.clear()
-            _clear_async_queues()
+        inference_request_q = None
+        inference_result_q = None
+        inference_stop = None
+        worker_thread = None
 
         def _run_inference_with_nav_fallback(model_data, navigation_text, navigation_weight):
             def _run_once(weight):
@@ -416,9 +214,6 @@ def main():
                     model_data,
                     navigation_text=navigation_text,
                     navigation_weight=weight,
-                    vlm_generate_timing=vlm_generate_timing,
-                    disable_unused_generate_logits=args.disable_unused_generate_logits,
-                    vlm_image_pixels=args.vlm_image_pixels,
                 )
 
             try:
@@ -486,12 +281,10 @@ def main():
                     "images_array": images_array,
                     "history_xyz": history_xyz,
                     "history_rot": history_rot,
-                    "ego_state": state.copy(),
                     "navigation_text": nav_state.navigation_text,
                     "navigation_weight": nav_state.navigation_weight,
                     "vqa_question": nav_state.vqa_question,
                     "prompt_revision": nav_state.revision,
-                    "respawn_revision": respawn_revision,
                 }
 
             def _inference_worker():
@@ -524,7 +317,6 @@ def main():
                                 "result_ts": time.time(),
                                 "vqa_question": req["vqa_question"],
                                 "prompt_revision": req["prompt_revision"],
-                                "respawn_revision": req["respawn_revision"],
                             }
                         else:
                             navigation_text = (
@@ -548,14 +340,12 @@ def main():
                                 "navigation_text": navigation_text,
                                 "navigation_weight": navigation_weight,
                                 "prompt_revision": req["prompt_revision"],
-                                "respawn_revision": req["respawn_revision"],
                             }
                     except Exception as e:
                         result = {
                             "frame_submitted": req_frame,
                             "error": str(e),
                             "result_ts": time.time(),
-                            "respawn_revision": req.get("respawn_revision"),
                         }
 
                     while True:
@@ -573,7 +363,7 @@ def main():
             worker_thread.start()
 
         print("\nStarting control loop...")
-        if save_video:
+        if cfg.SAVE_VIDEO:
             print(f"Recording video to: {cfg.OUTPUT_VIDEO}")
         print("-" * 60)
 
@@ -604,7 +394,6 @@ def main():
                     prev_selected_trajectory = None
                     current_trajectory = None
                     current_pred_xyz = None
-                    current_pred_world = None
                     current_trajectory_ts = None
                     pending_inference = False
                     last_seen_nav_revision = nav_state.revision
@@ -622,34 +411,20 @@ def main():
             frame_count += 1
 
             state = carla_if.get_ego_state()
-            last_applied_control = carla_if.get_applied_control()
             carla_if.update_history(state)
 
             images = carla_if.get_camera_images()
-            if args.auto_respawn:
-                collision_decision = respawn_monitor.check_collision(
-                    frame_count=frame_count,
-                    collision_count=carla_if.get_collision_count(),
-                    last_collision_event=carla_if.get_last_collision_event(),
-                )
-                if collision_decision.should_respawn:
-                    _auto_respawn(collision_decision.reason)
-                    continue
-
             if len(images) > 1:
                 latest_ui_frame = images[1]
             latest_telemetry = {
                 "frame": frame_count,
                 "speed_kmh": state["speed"] * 3.6,
-                "steering": last_applied_control["steer"],
+                "steering": prev_control["steer"],
                 "inference_time": current_inference_time,
             }
             frame_buffer.append(images)
             if len(frame_buffer) > cfg.NUM_FRAMES:
                 frame_buffer.pop(0)
-            if current_pred_world is not None:
-                current_pred_xyz = world_to_alpamayo_local(current_pred_world, state)
-                current_trajectory = current_pred_xyz[current_selected_traj_idx]
 
             if args.async_mode:
                 now_ts = time.time()
@@ -661,24 +436,6 @@ def main():
                         and nav_state.revision != last_vqa_submitted_revision
                         and nav_state.revision != last_vqa_completed_revision
                     )
-                elif args.mode == "normal":
-                    frame_ready = len(frame_buffer) >= cfg.NUM_FRAMES
-                    if frame_ready:
-                        latency_stats.record_eligible_frame()
-                    should_submit_inference = should_refresh_normal_inference(
-                        frame_ready=frame_ready,
-                        has_trajectory=current_trajectory is not None,
-                        pending_inference=pending_inference,
-                        frame_count=frame_count,
-                        last_refresh_frame=last_model_refresh_frame,
-                        min_interval_frames=args.normal_inference_interval_frames,
-                    )
-                    if (
-                        frame_ready
-                        and not should_submit_inference
-                        and current_trajectory is not None
-                    ):
-                        latency_stats.record_reuse_frame()
                 else:
                     should_submit_inference = (
                         len(frame_buffer) >= cfg.NUM_FRAMES
@@ -715,14 +472,6 @@ def main():
                             f"[Frame {frame_count}] Discarded stale inference result for "
                             f"prompt revision {latest_result.get('prompt_revision')}"
                         )
-                    elif (
-                        latest_result.get("respawn_revision", respawn_revision)
-                        != respawn_revision
-                    ):
-                        print(
-                            f"[Frame {frame_count}] Discarded stale inference result from "
-                            f"respawn revision {latest_result.get('respawn_revision')}"
-                        )
                     elif "error" not in latest_result and latest_result.get("mode") == "vqa":
                         answer = latest_result.get("answer") or extract_answer_text(
                             latest_result.get("extra")
@@ -746,17 +495,12 @@ def main():
                             prev_selected_trajectory,
                         )
                         current_selected_traj_idx = selected_idx
-                        anchor_state = latest_result.get("ego_state", state)
-                        current_pred_world = alpamayo_local_to_world(traj_samples, anchor_state)
-                        current_pred_xyz = world_to_alpamayo_local(current_pred_world, state)
-                        current_trajectory = current_pred_xyz[selected_idx]
+                        current_trajectory = traj_samples[selected_idx]
                         prev_selected_trajectory = current_trajectory.copy()
+                        current_pred_xyz = traj_samples
                         current_cot = extract_cot_text(extra)
                         current_inference_time = inference_time
                         current_trajectory_ts = float(latest_result["result_ts"])
-                        if latest_result.get("mode") == "normal":
-                            last_model_refresh_frame = frame_count
-                            latency_stats.record_model_refresh(inference_time)
 
                         print(
                             f"[Frame {frame_count}] Inference done: {inference_time:.2f}s "
@@ -776,22 +520,24 @@ def main():
                         print(f"[Frame {frame_count}] Inference error: {latest_result['error']}")
             else:
                 if len(frame_buffer) >= cfg.NUM_FRAMES:
+                    images_array = np.zeros(
+                        (
+                            cfg.NUM_CAMERAS,
+                            cfg.NUM_FRAMES,
+                            cfg.IMG_HEIGHT,
+                            cfg.IMG_WIDTH,
+                            cfg.IMG_CHANNELS,
+                        ),
+                        dtype=np.uint8,
+                    )
+                    for t, frame_images in enumerate(frame_buffer):
+                        for c in range(cfg.NUM_CAMERAS):
+                            images_array[c, t] = frame_images[c]
+
+                    history_xyz, history_rot = carla_if.get_history_in_local_frame()
+
+                    model_data = prepare_model_input(images_array, history_xyz, history_rot)
                     if args.mode == "vqa":
-                        images_array = np.zeros(
-                            (
-                                cfg.NUM_CAMERAS,
-                                cfg.NUM_FRAMES,
-                                cfg.IMG_HEIGHT,
-                                cfg.IMG_WIDTH,
-                                cfg.IMG_CHANNELS,
-                            ),
-                            dtype=np.uint8,
-                        )
-                        for t, frame_images in enumerate(frame_buffer):
-                            for c in range(cfg.NUM_CAMERAS):
-                                images_array[c, t] = frame_images[c]
-                        history_xyz, history_rot = carla_if.get_history_in_local_frame()
-                        model_data = prepare_model_input(images_array, history_xyz, history_rot)
                         should_run_vqa = (
                             bool(nav_state.vqa_question)
                             and nav_state.revision != last_vqa_completed_revision
@@ -811,82 +557,43 @@ def main():
                             print(f"    Q: {nav_state.vqa_question}")
                             print(f"    A: {answer[:160]}...")
                     else:
-                        should_run_inference = True
-                        if args.mode == "normal":
-                            latency_stats.record_eligible_frame()
-                            should_run_inference = should_refresh_normal_inference(
-                                frame_ready=True,
-                                has_trajectory=current_trajectory is not None,
-                                pending_inference=False,
-                                frame_count=frame_count,
-                                last_refresh_frame=last_model_refresh_frame,
-                                min_interval_frames=args.normal_inference_interval_frames,
-                            )
-                            if not should_run_inference and current_trajectory is not None:
-                                latency_stats.record_reuse_frame()
-                        if not should_run_inference:
-                            model_data = None
-                        else:
-                            images_array = np.zeros(
-                                (
-                                    cfg.NUM_CAMERAS,
-                                    cfg.NUM_FRAMES,
-                                    cfg.IMG_HEIGHT,
-                                    cfg.IMG_WIDTH,
-                                    cfg.IMG_CHANNELS,
-                                ),
-                                dtype=np.uint8,
-                            )
-                            for t, frame_images in enumerate(frame_buffer):
-                                for c in range(cfg.NUM_CAMERAS):
-                                    images_array[c, t] = frame_images[c]
-                            history_xyz, history_rot = carla_if.get_history_in_local_frame()
-                            model_data = prepare_model_input(images_array, history_xyz, history_rot)
-
-                        navigation_text = (
-                            nav_state.navigation_text if args.mode == "navigation" else ""
-                        )
+                        navigation_text = nav_state.navigation_text if args.mode == "navigation" else ""
                         navigation_weight = (
                             nav_state.navigation_weight if args.mode == "navigation" else 1.0
                         )
-                        if model_data is not None:
-                            model_start_time = time.time()
-                            pred_xyz, extra = _run_inference_with_nav_fallback(
-                                model_data,
-                                navigation_text=navigation_text,
-                                navigation_weight=navigation_weight,
-                            )
-                            model_inference_time = time.time() - model_start_time
+                        model_start_time = time.time()
+                        pred_xyz, extra = _run_inference_with_nav_fallback(
+                            model_data,
+                            navigation_text=navigation_text,
+                            navigation_weight=navigation_weight,
+                        )
+                        model_inference_time = time.time() - model_start_time
 
-                            traj_samples = extract_trajectory_samples(pred_xyz)
-                            selected_idx, _similarity_scores = select_trajectory_by_prev_similarity(
-                                traj_samples,
-                                prev_selected_trajectory,
-                            )
-                            current_selected_traj_idx = selected_idx
-                            current_pred_world = alpamayo_local_to_world(traj_samples, state)
-                            current_pred_xyz = world_to_alpamayo_local(current_pred_world, state)
-                            current_trajectory = current_pred_xyz[selected_idx]
-                            prev_selected_trajectory = current_trajectory.copy()
-                            current_cot = extract_cot_text(extra)
-                            current_inference_time = model_inference_time
-                            current_trajectory_ts = time.time()
-                            if args.mode == "normal":
-                                last_model_refresh_frame = frame_count
-                                latency_stats.record_model_refresh(model_inference_time)
+                        traj_samples = extract_trajectory_samples(pred_xyz)
+                        selected_idx, _similarity_scores = select_trajectory_by_prev_similarity(
+                            traj_samples,
+                            prev_selected_trajectory,
+                        )
+                        current_selected_traj_idx = selected_idx
+                        current_trajectory = traj_samples[selected_idx]
+                        prev_selected_trajectory = current_trajectory.copy()
+                        current_pred_xyz = traj_samples
+                        current_cot = extract_cot_text(extra)
+                        current_inference_time = model_inference_time
+                        current_trajectory_ts = time.time()
 
-                            print(f"[Frame {frame_count}] Inference: {model_inference_time:.2f}s")
-                            print(f"    CoT: {current_cot[:60]}...")
-                            if args.mode == "navigation":
-                                print(
-                                    f"    Nav: {nav_state.navigation_text or '(none)'} "
-                                    f"(weight={nav_state.navigation_weight:.2f})"
-                                )
+                        print(f"[Frame {frame_count}] Inference: {model_inference_time:.2f}s")
+                        print(f"    CoT: {current_cot[:60]}...")
+                        if args.mode == "navigation":
                             print(
-                                f"    Selected traj sample: {current_selected_traj_idx}/"
-                                f"{cfg.NUM_TRAJ_SAMPLES - 1}"
+                                f"    Nav: {nav_state.navigation_text or '(none)'} "
+                                f"(weight={nav_state.navigation_weight:.2f})"
                             )
-                            print(f"    Traj[0:3]: {current_trajectory[:3, :2]}")
+                        print(
+                            f"    Selected traj sample: {current_selected_traj_idx}/"
+                            f"{cfg.NUM_TRAJ_SAMPLES - 1}"
+                        )
+                        print(f"    Traj[0:3]: {current_trajectory[:3, :2]}")
 
             if current_trajectory is not None:
                 vehicle_tf = carla_if.ego_vehicle.get_transform()
@@ -895,18 +602,19 @@ def main():
                     current_trajectory[:, :3],
                     float(state["speed"]),
                 )
-                current_control_target_xyz = _ctrl_debug.get("target_wp_local_alpamayo")
 
-                prev_control = smooth_control(
-                    prev_control,
-                    steering_raw,
-                    throttle_raw,
-                    brake_raw,
-                )
-                steering = prev_control["steer"]
-                throttle = prev_control["throttle"]
-                brake = prev_control["brake"]
-                commanded_control = carla_if.apply_control(steering, throttle, brake)
+                alpha = cfg.CONTROL_SMOOTH_ALPHA
+                steering = (1.0 - alpha) * prev_control["steer"] + alpha * steering_raw
+                throttle = (1.0 - alpha) * prev_control["throttle"] + alpha * throttle_raw
+                brake = (1.0 - alpha) * prev_control["brake"] + alpha * brake_raw
+
+                if throttle >= brake:
+                    brake = 0.0
+                else:
+                    throttle = 0.0
+
+                prev_control = {"steer": steering, "throttle": throttle, "brake": brake}
+                carla_if.apply_control(steering, throttle, brake)
 
                 if current_pred_xyz is not None:
                     cam_img = images[1]
@@ -918,20 +626,19 @@ def main():
                         current_inference_time,
                         current_cot,
                         state["speed"] * 3.6,
-                        commanded_control["steer"],
+                        steering,
                         navigation_text=nav_state.navigation_text,
                         navigation_weight=nav_state.navigation_weight,
                         paused=nav_state.paused,
-                        control_target_xyz=current_control_target_xyz,
                     )
                     latest_ui_frame = vis_frame
-                    if save_video:
+                    if cfg.SAVE_VIDEO:
                         video_recorder.add_frame(vis_frame)
 
                 latest_telemetry = {
                     "frame": frame_count,
                     "speed_kmh": state["speed"] * 3.6,
-                    "steering": commanded_control["steer"],
+                    "steering": steering,
                     "inference_time": current_inference_time,
                 }
                 if pygame_ui is not None:
@@ -939,73 +646,23 @@ def main():
 
                 print(
                     f"[Frame {frame_count}] Speed: {state['speed']*3.6:.1f} km/h, "
-                    "Applied: "
-                    f"Steer {last_applied_control['steer']:.4f}, "
-                    f"Throttle {last_applied_control['throttle']:.3f}, "
-                    f"Brake {last_applied_control['brake']:.3f} | "
-                    "Next cmd: "
-                    f"Steer {commanded_control['steer']:.4f}, "
-                    f"Throttle {commanded_control['throttle']:.3f}, "
-                    f"Brake {commanded_control['brake']:.3f}"
+                    f"Steer: {steering:.4f}, Throttle: {throttle:.3f}, Brake: {brake:.3f}"
                 )
-                if args.control_debug:
-                    print(
-                        "    Control debug: "
-                        f"raw=({steering_raw:.4f}, {throttle_raw:.3f}, {brake_raw:.3f}) "
-                        f"cmd=({steering:.4f}, {throttle:.3f}, {brake:.3f}) "
-                        "last_tick=("
-                        f"{last_applied_control['steer']:.4f}, "
-                        f"{last_applied_control['throttle']:.3f}, "
-                        f"{last_applied_control['brake']:.3f}) "
-                        f"flags(hand={last_applied_control['hand_brake']}, "
-                        f"rev={last_applied_control['reverse']}, "
-                        f"manual={last_applied_control['manual_gear_shift']}) "
-                        f"pid_steer={float(_ctrl_debug.get('pid_steer', steering_raw)):.4f} "
-                        f"steer_gain={float(_ctrl_debug.get('steering_gain', 1.0)):.2f} "
-                        f"target_idx={_ctrl_debug.get('target_idx')} "
-                        f"target_speed={float(_ctrl_debug.get('target_speed_kmh', 0.0)):.2f}km/h"
-                    )
                 if current_trajectory_ts is not None and args.async_mode:
                     print(f"    Trajectory age: {time.time() - current_trajectory_ts:.2f}s")
-                if args.auto_respawn:
-                    stuck_decision = respawn_monitor.check_stuck(
-                        frame_count=frame_count,
-                        speed_kmh=state["speed"] * 3.6,
-                        throttle=throttle,
-                        brake=brake,
-                        has_trajectory=True,
-                    )
-                    if stuck_decision.should_respawn:
-                        _auto_respawn(stuck_decision.reason)
             else:
                 if args.mode == "vqa":
-                    commanded_control = carla_if.apply_control(0.0, 0.0, 1.0)
+                    carla_if.apply_control(0.0, 0.0, 1.0)
                 else:
-                    commanded_control = carla_if.apply_control(0.0, 0.3, 0.0)
+                    carla_if.apply_control(0.0, 0.3, 0.0)
                 latest_telemetry = {
                     "frame": frame_count,
                     "speed_kmh": state["speed"] * 3.6,
-                    "steering": last_applied_control["steer"],
+                    "steering": 0.0,
                     "inference_time": current_inference_time,
                 }
                 if pygame_ui is not None:
                     pygame_ui.draw(latest_ui_frame, nav_state, latest_telemetry)
-                if args.control_debug:
-                    print(
-                        f"[Frame {frame_count}] No trajectory. "
-                        "Applied: "
-                        f"Steer {last_applied_control['steer']:.4f}, "
-                        f"Throttle {last_applied_control['throttle']:.3f}, "
-                        f"Brake {last_applied_control['brake']:.3f} | "
-                        "Next cmd: "
-                        f"Steer {commanded_control['steer']:.4f}, "
-                        f"Throttle {commanded_control['throttle']:.3f}, "
-                        f"Brake {commanded_control['brake']:.3f}"
-                    )
-
-            if args.max_frames and frame_count >= args.max_frames:
-                print(f"\nReached --max-frames={args.max_frames}; stopping.")
-                break
 
     except KeyboardInterrupt:
         print("\n\nInterrupted by user.")
@@ -1021,39 +678,11 @@ def main():
                 pass
             if worker_thread is not None:
                 worker_thread.join(timeout=2.0)
-        if save_video and video_recorder:
+        if cfg.SAVE_VIDEO and video_recorder:
             video_recorder.save()
         if pygame_ui is not None:
             pygame_ui.close()
         carla_if.cleanup()
-        if args.mode == "normal":
-            stats_dict = latency_stats.to_dict(
-                interval_frames=args.normal_inference_interval_frames,
-                mode=args.mode,
-            )
-            stats_dict.update(vlm_generate_timing.to_dict())
-            stats_dict["vlm_image_pixels"] = int(args.vlm_image_pixels)
-            stats_dict["disable_unused_generate_logits"] = bool(
-                args.disable_unused_generate_logits
-            )
-            stats_dict["respawn_count"] = int(respawn_count)
-            stats_dict["respawn_reasons"] = respawn_reasons
-            print(
-                "Normal latency stats: "
-                f"eligible_frames={stats_dict['eligible_frames']}, "
-                f"model_refreshes={stats_dict['model_refreshes']}, "
-                f"trajectory_reuse_frames={stats_dict['trajectory_reuse_frames']}, "
-                f"vlm_call_reduction_vs_per_frame_baseline="
-                f"{stats_dict['vlm_call_reduction_vs_per_frame_baseline'] * 100:.1f}%, "
-                f"total_model_time={stats_dict['total_model_time_sec']:.2f}s, "
-                f"avg_vlm_generate_time={stats_dict['avg_vlm_generate_time_sec']:.2f}s, "
-                f"respawns={respawn_count}"
-            )
-            if args.latency_stats_json:
-                stats_path = Path(args.latency_stats_json)
-                stats_path.parent.mkdir(parents=True, exist_ok=True)
-                stats_path.write_text(json.dumps(stats_dict, indent=2), encoding="utf-8")
-                print(f"Wrote latency stats JSON: {stats_path}")
 
     print("\nStopped.")
 

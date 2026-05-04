@@ -8,7 +8,6 @@ import carla
 import numpy as np
 
 from . import config as cfg
-from .trajectory_cache import world_to_alpamayo_local
 
 
 def _resolve_vehicle_pid_controller():
@@ -56,13 +55,6 @@ def local_to_world(vehicle_tf, wp_local):
         loc_w = vehicle_tf.transform(carla.Location(x=float(p[0]), y=float(p[1]), z=float(p[2])))
         wp_world.append([loc_w.x, loc_w.y, loc_w.z])
     return np.asarray(wp_world, dtype=np.float64)
-
-
-class _RawTargetWaypoint:
-    """Waypoint-like wrapper around an Alpamayo world-space target location."""
-
-    def __init__(self, location):
-        self.transform = carla.Transform(location)
 
 
 class OfficialPIDFollower:
@@ -115,51 +107,20 @@ class OfficialPIDFollower:
             y=float(wp_world[target_idx, 1]),
             z=float(wp_world[target_idx, 2]),
         )
-        target_wp = _RawTargetWaypoint(loc)
+        target_wp = self.map.get_waypoint(loc, project_to_road=True, lane_type=carla.LaneType.Driving)
         return target_wp, target_idx, lookahead_m
-
-    @staticmethod
-    def _estimate_target_speed_kmh(wp_local):
-        """Estimate target speed from Alpamayo waypoint spacing.
-
-        Alpamayo expresses stop and slow-down intent by producing short future
-        extents. Only allow a full stop for trajectories whose entire spatial
-        extent stays near the ego vehicle. For actionable forward paths, keep a
-        minimum crawl speed because early trajectory samples can be densely
-        clustered near the origin even when later waypoints continue forward.
-        """
-
-        if len(wp_local) < 2:
-            return 0.0
-
-        traj_extent = float(np.max(np.linalg.norm(wp_local[:, :2], axis=1)))
-        if traj_extent <= cfg.PID_STOP_TRAJECTORY_MAX_EXTENT_M:
-            return 0.0
-
-        horizon = int(min(cfg.PID_TARGET_SPEED_HORIZON_STEPS, len(wp_local) - 1))
-        segment_distances = np.linalg.norm(np.diff(wp_local[: horizon + 1, :2], axis=0), axis=1)
-        displacement_speed_kmh = float(np.mean(segment_distances) / cfg.CONTROL_DT * 3.6)
-        extent_floor_kmh = float(
-            cfg.PID_TARGET_SPEED_MIN_KMH + cfg.PID_TARGET_SPEED_EXTENT_GAIN * traj_extent
-        )
-        target_speed_kmh = max(displacement_speed_kmh, extent_floor_kmh)
-        return float(
-            np.clip(
-                target_speed_kmh,
-                cfg.PID_TARGET_SPEED_MIN_KMH,
-                cfg.PID_TARGET_SPEED_MAX_KMH,
-            )
-        )
-
-    @staticmethod
-    def _scale_steering(steering):
-        return float(np.clip(float(steering) * cfg.STEERING_GAIN, -1.0, 1.0))
 
     def compute_control(self, vehicle_tf, wp_ego, speed_mps):
         wp_local = alpamayo_to_carla_local(wp_ego)
         wp_world = local_to_world(vehicle_tf, wp_local)
         traj_extent = float(np.max(np.linalg.norm(wp_local[:, :2], axis=1)))
-        target_speed_kmh = self._estimate_target_speed_kmh(wp_local)
+        target_speed_kmh = float(
+            np.clip(
+                cfg.PID_TARGET_SPEED_MIN_KMH + cfg.PID_TARGET_SPEED_EXTENT_GAIN * traj_extent,
+                cfg.PID_TARGET_SPEED_MIN_KMH,
+                cfg.PID_TARGET_SPEED_MAX_KMH,
+            )
+        )
         target_wp, target_idx, lookahead_m = self._pick_target(wp_world, speed_mps)
         if target_wp is None:
             return 0.0, 0.0, 0.0, {
@@ -167,36 +128,12 @@ class OfficialPIDFollower:
                 "traj_extent": traj_extent,
             }
         control = self.pid.run_step(target_speed_kmh, target_wp)
-        steering = self._scale_steering(control.steer)
         debug = {
             "mode": "official_pid",
             "target_speed_kmh": target_speed_kmh,
-            "pid_steer": float(control.steer),
-            "steering_gain": float(cfg.STEERING_GAIN),
             "lookahead_m": lookahead_m,
             "target_idx": int(target_idx),
-            "target_wp_xy": [
-                float(target_wp.transform.location.x),
-                float(target_wp.transform.location.y),
-            ],
-            "target_wp_local_alpamayo": world_to_alpamayo_local(
-                np.asarray(
-                    [
-                        [
-                            float(target_wp.transform.location.x),
-                            float(target_wp.transform.location.y),
-                            float(target_wp.transform.location.z),
-                        ]
-                    ],
-                    dtype=np.float32,
-                ),
-                {
-                    "x": float(vehicle_tf.location.x),
-                    "y": float(vehicle_tf.location.y),
-                    "z": float(vehicle_tf.location.z),
-                    "yaw": float(vehicle_tf.rotation.yaw),
-                },
-            )[0].tolist(),
+            "target_wp_xy": [float(target_wp.transform.location.x), float(target_wp.transform.location.y)],
             "traj_extent": traj_extent,
         }
-        return steering, float(control.throttle), float(control.brake), debug
+        return float(control.steer), float(control.throttle), float(control.brake), debug

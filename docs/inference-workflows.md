@@ -83,48 +83,11 @@ The closed-loop script also defaults to `--cuda-linalg-library magma`; this
 avoids a cuSOLVER `torch.linalg.cholesky` initialization failure observed in
 the Alpamayo action-space conversion path.
 
-Normal mode latency optimization:
-
-- Default normal mode keeps the original per-ready-frame refresh behavior,
-  returned-logits behavior, and Qwen-VL image-token budget
-  (`--vlm-image-pixels 196608`) for path quality. Token sampling, generated
-  sequence handling, KV cache use, and diffusion parameters are unchanged.
-- Low-latency experiment: add `--disable-unused-generate-logits` to skip
-  returned VLM logits and/or `--vlm-image-pixels 65536` only when you accept
-  possible path-quality loss from reduced visual tokens.
-- On shutdown, compare `avg_vlm_generate_time_sec` in the printed/written normal
-  latency stats; the target optimization gate is `>=30%`.
-- For repeatable benchmark runs, add `--max-frames N --no-video` to stop
-  automatically and remove MP4 encoding overhead. Add `--latency-stats-json`
-  to write machine-readable stats, then compare runs with
-  `python tools/compare_latency_runs.py baseline.json optimized.json`.
-- Automatic ego respawn is on by default. A collision sensor triggers immediate
-  respawn, and repeated low-speed throttle deadlocks trigger after
-  `--respawn-stuck-frames 40`. Use `--no-auto-respawn` to keep the previous
-  behavior.
-- Closed-loop control tracks the raw Alpamayo trajectory. The PID target is
-  selected from the model output and is not projected onto CARLA map waypoints;
-  the video overlay shows the Alpamayo path in blue and the active PID target
-  in green. The longitudinal target speed is estimated from Alpamayo waypoint
-  spacing, so short stop/slow trajectories are allowed to command braking.
-
 Optional pygame UI modes:
 
 ```bash
 # Normal closed-loop trajectory control with camera UI.
 python carla_alpamayo_closed_loop.py --mode normal --pygame-ui
-
-# Baseline for latency comparison.
-python carla_alpamayo_closed_loop.py --mode normal --pygame-ui \
-  --keep-generate-logits --max-frames 100 --no-video \
-  --latency-stats-json baseline.json
-
-# Low-latency experiment and 30% gate check.
-python carla_alpamayo_closed_loop.py --mode normal --pygame-ui \
-  --disable-unused-generate-logits --vlm-image-pixels 65536 \
-  --max-frames 100 --no-video --latency-stats-json optimized.json
-python tools/compare_latency_runs.py baseline.json optimized.json \
-  --metric vlm-generate --min-reduction 0.30
 
 # Navigation-controlled trajectory generation.
 python carla_alpamayo_closed_loop.py --mode navigation --pygame-ui --start-paused
