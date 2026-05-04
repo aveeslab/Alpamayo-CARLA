@@ -33,17 +33,7 @@ def _project_one_trajectory(
     u = np.clip(u, 0, img_width - 1).astype(np.int32)
     v = np.clip(v, 0, img_height - 1).astype(np.int32)
     points_2d = np.column_stack([u[valid], v[valid]])
-    if len(points_2d) == 0:
-        return
-    if len(points_2d) == 1:
-        cv2.circle(
-            result,
-            tuple(points_2d[0]),
-            max(6, line_thickness * 2),
-            point_color,
-            -1,
-            cv2.LINE_AA,
-        )
+    if len(points_2d) <= 1:
         return
 
     for i in range(len(points_2d) - 1):
@@ -59,14 +49,7 @@ def _project_one_trajectory(
         cv2.circle(result, tuple(pt), max(4, line_thickness), point_color, -1, cv2.LINE_AA)
 
 
-def project_trajectory_to_image(
-    cam_img,
-    pred_xyz,
-    selected_idx=0,
-    camera_height=2.4,
-    fov=95,
-    control_target_xyz=None,
-):
+def project_trajectory_to_image(cam_img, pred_xyz, selected_idx=0, camera_height=2.4, fov=120):
     """Project one or multiple trajectories onto image."""
     img_height, img_width = cam_img.shape[:2]
     focal_length_px = img_width / (2 * np.tan(np.radians(fov / 2)))
@@ -114,23 +97,6 @@ def project_trajectory_to_image(
         line_thickness=8,
     )
 
-    if control_target_xyz is not None:
-        control_arr = np.asarray(control_target_xyz, dtype=np.float32)
-        if control_arr.ndim == 1:
-            control_arr = control_arr[None, :]
-        if control_arr.ndim == 2 and control_arr.shape[1] >= 3:
-            _project_one_trajectory(
-                result=result,
-                points_3d=control_arr[:, :3],
-                img_width=img_width,
-                img_height=img_height,
-                focal_length_px=focal_length_px,
-                camera_height=camera_height,
-                line_color=(0, 255, 0),
-                point_color=(0, 255, 0),
-                line_thickness=6,
-            )
-
     return result
 
 
@@ -146,15 +112,9 @@ def create_visualization_frame(
     navigation_text="",
     navigation_weight=1.0,
     paused=False,
-    control_target_xyz=None,
 ):
     """Create a single visualization frame with all overlays."""
-    vis_img = project_trajectory_to_image(
-        cam_img,
-        pred_xyz,
-        selected_idx=selected_idx,
-        control_target_xyz=control_target_xyz,
-    )
+    vis_img = project_trajectory_to_image(cam_img, pred_xyz, selected_idx=selected_idx)
     vis_img = cv2.cvtColor(vis_img, cv2.COLOR_RGB2BGR)
     h, w = vis_img.shape[:2]
 
@@ -195,8 +155,7 @@ def create_visualization_frame(
     nav_display = nav_display[:160] + "..." if len(nav_display) > 160 else nav_display
     cv2.putText(
         vis_img,
-        f"{status} | Blue: Alpamayo path | Green: PID target | "
-        f"Nav: {nav_display} | Weight: {navigation_weight:.2f}",
+        f"{status} | Nav: {nav_display} | Weight: {navigation_weight:.2f}",
         (20, h - 150),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.7,

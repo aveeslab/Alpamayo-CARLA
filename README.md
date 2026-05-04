@@ -47,19 +47,7 @@ Data collection, open-loop inference, and closed-loop inference instructions hav
 
 The closed-loop runner supports `normal`, `navigation`, and `vqa` modes through
 `--mode`. It defaults to 4-bit quantization, `Town03`, `device_map=auto`, and
-the MAGMA CUDA linalg backend for local GPU stability. In `normal` mode it
-profiles Alpamayo `vlm.generate()` time while preserving Alpamayo's original
-returned-logits behavior and Qwen-VL image-token budget
-(`--vlm-image-pixels 196608`) for path quality. Use
-`--disable-unused-generate-logits` or `--vlm-image-pixels 65536` only for
-explicit low-latency experiments, then compare `--latency-stats-json` outputs with
-`tools/compare_latency_runs.py --metric vlm-generate`. Automatic ego respawn is
-enabled by default: collisions respawn immediately, and repeated low-speed
-throttle deadlocks respawn after `--respawn-stuck-frames 40`; add
-`--no-auto-respawn` to disable it. Closed-loop control follows the raw
-Alpamayo trajectory, not CARLA map-projected waypoints; the video overlay shows
-the Alpamayo path in blue and the active PID target in green. Target speed is
-estimated from Alpamayo waypoint spacing so stop/slow trajectories can brake.
+the MAGMA CUDA linalg backend for local GPU stability.
 
 ```bash
 source a1_5_carla_venv/bin/activate
