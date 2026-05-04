@@ -59,14 +59,14 @@ def parse_args():
         "--quantization",
         dest="quantization",
         action="store_true",
-        default=True,
-        help="Use 4-bit quantized model. This is the default for local closed-loop testing.",
+        default=False,
+        help="Use 4-bit quantized model instead of the default full-precision model.",
     )
     parser.add_argument(
         "--no-quantization",
         dest="quantization",
         action="store_false",
-        help="Use full-precision model instead of the default 4-bit quantized model.",
+        help="Use the default full-precision model.",
     )
     parser.add_argument(
         "--async",
