@@ -93,8 +93,6 @@ python -m pip install --no-deps -e third_party/alpamayo1.5
 python -m pip install -r requirements-alpamayo.txt
 ```
 
-`uv sync --active` installs the core `pyproject.toml` dependencies for this integration project. The editable install step exposes the `alpamayo1_5` Python package from the submodule. The extra `requirements-alpamayo.txt` step is still required for the CARLA inference scripts because they import OpenCV, SciPy, and optional 4-bit quantization support (`bitsandbytes`).
-
 ### 2.3 Authenticate with Hugging Face
 
 The model requires access to gated resources. Request access first:
