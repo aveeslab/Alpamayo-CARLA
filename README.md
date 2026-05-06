@@ -82,7 +82,6 @@ The closed-loop runner supports `normal`, `navigation`, and `vqa` modes through
 ├── requirements-carla.txt
 ├── requirements-alpamayo.txt
 ├── LICENSE
-├── NOTICE
 └── README.md
 ```
 
@@ -107,10 +106,10 @@ If you encounter OOM errors:
 3. Keep `num_traj_samples` low on smaller GPUs.
 4. Close other GPU-intensive applications.
 
-## License and Third-Party Notices
+## License and Third-Party Licenses
 
-This repository's CARLA integration code and documentation are licensed under the Apache License 2.0. See [LICENSE](LICENSE).
+Apache License 2.0 - see [LICENSE](LICENSE) for details.
 
-This repository does not vendor NVIDIA Alpamayo 1.5 source code directly. Alpamayo is linked as a git submodule under `third_party/alpamayo1.5` and is licensed separately under Apache License 2.0. See `third_party/alpamayo1.5/LICENSE` and [NOTICE](NOTICE).
+This repository does not vendor NVIDIA Alpamayo 1.5 source code directly. Alpamayo is linked as a git submodule under `third_party/alpamayo1.5` and is licensed separately under Apache License 2.0. See `third_party/alpamayo1.5/LICENSE`.
 
 NVIDIA Alpamayo 1.5 model weights are not redistributed by this repository and are not covered by this repository's Apache License 2.0. Review the [Hugging Face model card](https://huggingface.co/nvidia/Alpamayo-1.5-10B) for the model license and usage restrictions, including non-commercial restrictions where applicable.
