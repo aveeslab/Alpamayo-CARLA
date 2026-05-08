@@ -44,7 +44,7 @@ tar -xvzf carla-0-9-16-linux
 ./CarlaUE4.sh -RenderOffScreen
 ```
 
-> Do not add `-quality-level=Low`; low-quality rendering can degrade camera inputs.
+> Do not add `-quality-level=Low`; low-quality rendering can make error.
 
 If your CARLA archive extracts into a nested package directory, move or symlink the CARLA root so that `~/carla` contains `CarlaUE4.sh` and `PythonAPI/`.
 
