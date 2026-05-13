@@ -487,7 +487,7 @@ def main():
                     pending_inference = False
                     last_seen_nav_revision = nav_state.revision
                 if nav_state.paused:
-                    carla_if.apply_control(0.0, 0.0, 1.0)
+                    carla_if._control(0.0, 0.0, 1.0)
                     latest_telemetry = {
                         **latest_telemetry,
                         "frame": frame_count,
@@ -778,7 +778,7 @@ def main():
                 if args.mode == "vqa":
                     carla_if.apply_control(0.0, 0.0, 1.0)
                 else:
-                    carla_if.apply_control(0.0, 0.3, 0.0)
+                    carla_if.apply_control(0.0, 0.0, 1.0)
                 latest_telemetry = {
                     "frame": frame_count,
                     "speed_kmh": state["speed"] * 3.6,
