@@ -47,8 +47,6 @@ Output:
 
 - `carla_alpamayo_open_loop_result.mp4`
 
-Smoke validation used a 4-frame subset and `--quantization` on an RTX 4080 SUPER 16 GB. Full-precision mode may require the larger VRAM budget described in the README.
-
 ## 3. Closed-Loop Inference
 
 Before running, make sure CARLA is running:
@@ -106,14 +104,6 @@ python carlamayo_closed_loop.py --async
 Output:
 
 - `carla_alpamayo_closed_loop_result.mp4`
-
-For lower VRAM machines, the validated command was:
-
-```bash
-source a1_5_carla_venv/bin/activate
-export CARLA_ROOT=~/carla
-python carlamayo_closed_loop.py --quantization --async
-```
 
 ## 4. NVIDIA Original Test Script
 
