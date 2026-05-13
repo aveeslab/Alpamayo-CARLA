@@ -57,6 +57,8 @@ The closed-loop runner supports `normal`, `navigation`, and `vqa` modes through
 ├── carlamayo_closed_loop.py
 ├── module/
 │   ├── config.py
+│   ├── data_collection.py
+│   ├── open_loop_dataset.py
 │   ├── pid_controller.py
 │   ├── navigation_control.py
 │   ├── pygame_ui.py
@@ -70,6 +72,9 @@ The closed-loop runner supports `normal`, `navigation`, and `vqa` modes through
 │   ├── inference-workflows.md
 │   ├── navigation-mode.md
 │   └── vqa-mode.md
+├── tests/
+│   ├── test_data_collection.py
+│   └── test_open_loop_dataset.py
 ├── requirements-carla.txt
 ├── requirements-alpamayo.txt
 ├── LICENSE
