@@ -44,13 +44,6 @@ The closed-loop runner supports `normal`, `navigation`, and `vqa` modes through
 - [Navigation Mode](docs/navigation-mode.md)
 - [VQA Mode](docs/vqa-mode.md)
 
-## Validation Status
-
-- Lightweight unit tests: covered by GitHub Actions CI (`pytest tests`).
-- Static formatting/linting: checked with Ruff.
-- Live CARLA closed-loop run: manually validated on CARLA 0.9.16 with an RTX 4080 SUPER 16 GB using `--mode normal --quantization`.
-- Full Alpamayo inference: requires gated model access and a suitable GPU; full precision typically needs at least 24 GB VRAM.
-
 ## Project Structure
 
 ```
