@@ -186,7 +186,7 @@ def main():
     num_frames_for_history = 4
 
     print("=" * 60)
-    print("CARLA -> Alpamayo-R1 Inference")
+    print("CARLA -> Alpamayo 1.5 Inference")
     print("=" * 60)
     print(f"Data root: {data_root}")
     print(f"Quantization: {'ON (4-bit)' if use_quantization else 'OFF (full-precision)'}")
@@ -201,14 +201,14 @@ def main():
             bnb_4bit_quant_type="nf4"
         )
         model = Alpamayo1_5.from_pretrained(
-            "nvidia/Alpamayo-R1-10B",
+            "nvidia/Alpamayo-1.5-10B",
             quantization_config=quantization_config,
             device_map="auto",
             torch_dtype=torch.bfloat16
         )
     else:
         model = Alpamayo1_5.from_pretrained(
-            "nvidia/Alpamayo-R1-10B",
+            "nvidia/Alpamayo-1.5-10B",
             dtype=torch.bfloat16
         ).to("cuda")
 
